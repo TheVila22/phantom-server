@@ -1,0 +1,58 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+
+const app = express();
+app.use(cors());
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Map of phantomId to socket.id
+const users = new Map();
+
+io.on('connection', (socket) => {
+  console.log('Nueva conexión entrante:', socket.id);
+
+  // Cuando un usuario abre la app, registra su UUID secreto en el servidor
+  socket.on('register', (phantomId) => {
+    if (phantomId) {
+      users.set(phantomId, socket.id);
+      console.log(`[+] Identidad registrada: ${phantomId} (Socket: ${socket.id})`);
+    }
+  });
+
+  // Enrutamiento de mensajes (El servidor NO lee el contenido, está cifrado en AES)
+  socket.on('private_message', (data) => {
+    const { to, from, payload } = data;
+    const recipientSocket = users.get(to);
+    
+    if (recipientSocket) {
+      io.to(recipientSocket).emit('private_message', data);
+      console.log(`[>] Mensaje enrutado de ${from} hacia ${to}`);
+    } else {
+      console.log(`[!] Destinatario ${to} no está online en este momento.`);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('[-] Conexión cerrada:', socket.id);
+    for (const [id, socketId] of users.entries()) {
+      if (socketId === socket.id) {
+        users.delete(id);
+        break;
+      }
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Phantom Secure Server (Router) escuchando en puerto ${PORT}`);
+});
