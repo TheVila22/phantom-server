@@ -6,6 +6,11 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
+// Endpoint de estado para UptimeRobot / Monitoreo
+app.get('/', (req, res) => {
+  res.send('Phantom Router Status: Active');
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
