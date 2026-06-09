@@ -21,6 +21,8 @@ const io = new Server(server, {
 
 // Map of phantomId to socket.id
 const users = new Map();
+// In-memory offline message queue (maps phantomId to Array of encrypted messages)
+const offlineMessages = new Map();
 
 io.on('connection', (socket) => {
   console.log('Nueva conexión entrante:', socket.id);
@@ -30,6 +32,16 @@ io.on('connection', (socket) => {
     if (phantomId) {
       users.set(phantomId, socket.id);
       console.log(`[+] Identidad registrada: ${phantomId} (Socket: ${socket.id})`);
+      
+      // Entregar mensajes offline en cola si existen
+      if (offlineMessages.has(phantomId)) {
+        const queued = offlineMessages.get(phantomId);
+        console.log(`[>>] Entregando ${queued.length} mensaje(s) offline acumulado(s) para ${phantomId}`);
+        queued.forEach(data => {
+          socket.emit('private_message', data);
+        });
+        offlineMessages.delete(phantomId);
+      }
     }
   });
 
@@ -42,7 +54,11 @@ io.on('connection', (socket) => {
       io.to(recipientSocket).emit('private_message', data);
       console.log(`[>] Mensaje enrutado de ${from} hacia ${to}`);
     } else {
-      console.log(`[!] Destinatario ${to} no está online en este momento.`);
+      console.log(`[!] Destinatario ${to} no está online. Guardando en cola de mensajes offline.`);
+      if (!offlineMessages.has(to)) {
+        offlineMessages.set(to, []);
+      }
+      offlineMessages.get(to).push(data);
     }
   });
 
