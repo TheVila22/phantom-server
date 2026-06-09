@@ -41,6 +41,25 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Telemetría de administración privada
+  socket.on('get_admin_stats', (data, callback) => {
+    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'thevila2026';
+    const { password } = data;
+    if (password === ADMIN_PASSWORD) {
+      if (typeof callback === 'function') {
+        callback({
+          success: true,
+          onlineCount: users.size,
+          onlineUsers: Array.from(users.keys())
+        });
+      }
+    } else {
+      if (typeof callback === 'function') {
+        callback({ success: false, error: 'Acceso denegado' });
+      }
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('[-] Conexión cerrada:', socket.id);
     for (const [id, socketId] of users.entries()) {
