@@ -33,6 +33,12 @@ io.on('connection', (socket) => {
       users.set(phantomId, socket.id);
       console.log(`[+] Identidad registrada: ${phantomId} (Socket: ${socket.id})`);
       
+      // Enviar la lista de usuarios conectados al socket que se acaba de registrar
+      socket.emit('online_users_list', Array.from(users.keys()));
+      
+      // Notificar a todos los demás que este usuario se ha conectado
+      socket.broadcast.emit('user_online', phantomId);
+
       // Entregar mensajes offline en cola si existen
       if (offlineMessages.has(phantomId)) {
         const queued = offlineMessages.get(phantomId);
@@ -86,6 +92,8 @@ io.on('connection', (socket) => {
     for (const [id, socketId] of users.entries()) {
       if (socketId === socket.id) {
         users.delete(id);
+        // Notificar a todos que este usuario se ha desconectado
+        io.emit('user_offline', id);
         break;
       }
     }
