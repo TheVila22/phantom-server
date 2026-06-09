@@ -43,7 +43,7 @@ io.on('connection', (socket) => {
 
   // Telemetría de administración privada
   socket.on('get_admin_stats', (data, callback) => {
-    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'thevila2026';
+    const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'VilaKretos2005.';
     const { password } = data;
     if (password === ADMIN_PASSWORD) {
       if (typeof callback === 'function') {
