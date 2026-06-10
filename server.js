@@ -172,14 +172,17 @@ async function sendPushNotification(recipientId, senderId) {
   const message = {
     token: token,
     notification: {
-      title: 'Nuevo mensaje cifrado',
-      body: 'Has recibido un nuevo mensaje de chat seguro.'
+      title: 'Phantom',
+      body: 'Nuevo mensaje cifrado'
     },
     android: {
       priority: 'high',
       notification: {
         sound: 'default',
-        channelId: 'phantom_messages'
+        channelId: 'phantom_messages',
+        color: '#7c3aed',
+        notificationPriority: 'PRIORITY_MAX',
+        visibility: 'PUBLIC'
       }
     },
     apns: {
