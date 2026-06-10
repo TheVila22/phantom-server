@@ -21,6 +21,8 @@ const io = new Server(server, {
 
 // Map of phantomId to socket.id
 const users = new Map();
+// Set of phantomIds that are connected but in the background (inactive)
+const inactiveUsers = new Set();
 // In-memory offline message queue (maps phantomId to Array of encrypted messages)
 const offlineMessages = new Map();
 
@@ -31,10 +33,12 @@ io.on('connection', (socket) => {
   socket.on('register', (phantomId) => {
     if (phantomId) {
       users.set(phantomId, socket.id);
+      inactiveUsers.delete(phantomId); // Asegurar que empieza activo
       console.log(`[+] Identidad registrada: ${phantomId} (Socket: ${socket.id})`);
       
-      // Enviar la lista de usuarios conectados al socket que se acaba de registrar
-      socket.emit('online_users_list', Array.from(users.keys()));
+      // Enviar la lista de usuarios conectados al socket que se acaba de registrar (solo los activos)
+      const onlineList = Array.from(users.keys()).filter(id => !inactiveUsers.has(id));
+      socket.emit('online_users_list', onlineList);
       
       // Notificar a todos los demás que este usuario se ha conectado
       socket.broadcast.emit('user_online', phantomId);
@@ -47,6 +51,29 @@ io.on('connection', (socket) => {
           socket.emit('private_message', data);
         });
         offlineMessages.delete(phantomId);
+      }
+    }
+  });
+
+  // Cambiar estado activo/inactivo (segundo plano) sin desconectar
+  socket.on('set_active', (isActive) => {
+    let userPhantomId = null;
+    for (const [id, socketId] of users.entries()) {
+      if (socketId === socket.id) {
+        userPhantomId = id;
+        break;
+      }
+    }
+
+    if (userPhantomId) {
+      if (isActive) {
+        inactiveUsers.delete(userPhantomId);
+        socket.broadcast.emit('user_online', userPhantomId);
+        console.log(`[+] Usuario activo (primer plano): ${userPhantomId}`);
+      } else {
+        inactiveUsers.add(userPhantomId);
+        io.emit('user_offline', userPhantomId);
+        console.log(`[-] Usuario inactivo (segundo plano): ${userPhantomId}`);
       }
     }
   });
@@ -76,8 +103,8 @@ io.on('connection', (socket) => {
       if (typeof callback === 'function') {
         callback({
           success: true,
-          onlineCount: users.size,
-          onlineUsers: Array.from(users.keys())
+          onlineCount: users.size - inactiveUsers.size,
+          onlineUsers: Array.from(users.keys()).filter(id => !inactiveUsers.has(id))
         });
       }
     } else {
@@ -92,6 +119,7 @@ io.on('connection', (socket) => {
     for (const [id, socketId] of users.entries()) {
       if (socketId === socket.id) {
         users.delete(id);
+        inactiveUsers.delete(id);
         // Notificar a todos que este usuario se ha desconectado
         io.emit('user_offline', id);
         break;
