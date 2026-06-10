@@ -34,12 +34,17 @@ if (serviceAccount) {
   console.log("[Push] Firebase Admin SDK no inicializado. Las notificaciones push y persistencia no funcionarán.");
 }
 
+const path = require('path');
+
 const app = express();
 app.use(cors());
 
-// Endpoint de estado para UptimeRobot / Monitoreo
-app.get('/', (req, res) => {
-  res.send('Phantom Router Status: Active');
+// Servir archivos estáticos del frontend (React + APK)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Redirigir cualquier otra ruta HTTP al index.html del frontend
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const server = http.createServer(app);
