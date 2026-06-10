@@ -74,7 +74,8 @@ function sendPushNotification(recipientId, senderId) {
     android: {
       priority: 'high',
       notification: {
-        sound: 'default'
+        sound: 'default',
+        channelId: 'phantom_messages'
       }
     },
     apns: {
@@ -158,7 +159,17 @@ io.on('connection', (socket) => {
 
   // Enrutamiento de mensajes (El servidor NO lee el contenido, está cifrado en AES)
   socket.on('private_message', (data) => {
-    const { to, from, payload } = data;
+    const { to, from, payload, recipientFcmToken, senderFcmToken } = data;
+    
+    if (recipientFcmToken) {
+      fcmTokens.set(to.toUpperCase(), recipientFcmToken);
+      console.log(`[Push] Token de destinatario registrado/recuperado para ${to.toUpperCase()} desde mensaje.`);
+    }
+    if (senderFcmToken) {
+      fcmTokens.set(from.toUpperCase(), senderFcmToken);
+      console.log(`[Push] Token de remitente registrado/recuperado para ${from.toUpperCase()} desde mensaje.`);
+    }
+
     const recipientSocket = users.get(to);
     
     if (recipientSocket) {
