@@ -2,6 +2,31 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const admin = require('firebase-admin');
+
+let serviceAccount;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } catch (e) {
+    console.error("Error parsing FIREBASE_SERVICE_ACCOUNT environment variable:", e);
+  }
+} else {
+  try {
+    serviceAccount = require('./firebase-service-account.json');
+  } catch (e) {
+    console.log("firebase-service-account.json file not found, running without Firebase Admin capabilities (local dev).");
+  }
+}
+
+if (serviceAccount) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  console.log("[Push] Firebase Admin SDK inicializado con éxito.");
+} else {
+  console.log("[Push] Firebase Admin SDK no inicializado. Las notificaciones push no funcionarán.");
+}
 
 const app = express();
 app.use(cors());
@@ -25,6 +50,50 @@ const users = new Map();
 const inactiveUsers = new Set();
 // In-memory offline message queue (maps phantomId to Array of encrypted messages)
 const offlineMessages = new Map();
+// Maps phantomId to FCM token
+const fcmTokens = new Map();
+
+function sendPushNotification(recipientId, senderId) {
+  const token = fcmTokens.get(recipientId.toUpperCase());
+  if (!token) {
+    console.log(`[Push] No hay token FCM registrado para ${recipientId.toUpperCase()}.`);
+    return;
+  }
+
+  if (admin.apps.length === 0) {
+    console.log(`[Push] Firebase no está inicializado. Ignorando push notification.`);
+    return;
+  }
+
+  const message = {
+    token: token,
+    notification: {
+      title: 'Nuevo mensaje cifrado',
+      body: 'Has recibido un nuevo mensaje de chat seguro.'
+    },
+    android: {
+      priority: 'high',
+      notification: {
+        sound: 'default'
+      }
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: 'default'
+        }
+      }
+    }
+  };
+
+  admin.messaging().send(message)
+    .then((response) => {
+      console.log(`[Push] Notificación enviada con éxito a ${recipientId.toUpperCase()}:`, response);
+    })
+    .catch((error) => {
+      console.error(`[Push] Error al enviar notificación a ${recipientId.toUpperCase()}:`, error);
+    });
+}
 
 io.on('connection', (socket) => {
   console.log('Nueva conexión entrante:', socket.id);
@@ -52,6 +121,15 @@ io.on('connection', (socket) => {
         });
         offlineMessages.delete(phantomId);
       }
+    }
+  });
+
+  // Registro de token FCM para notificaciones push con la app cerrada
+  socket.on('register_fcm_token', (data) => {
+    const { phantomId, token } = data;
+    if (phantomId && token) {
+      fcmTokens.set(phantomId.toUpperCase(), token);
+      console.log(`[Push] Token registrado para ${phantomId.toUpperCase()}: ${token.substring(0, 15)}...`);
     }
   });
 
@@ -86,12 +164,18 @@ io.on('connection', (socket) => {
     if (recipientSocket) {
       io.to(recipientSocket).emit('private_message', data);
       console.log(`[>] Mensaje enrutado de ${from} hacia ${to}`);
+      // Si está inactivo (segundo plano), le mandamos push para asegurar que le notifique
+      if (inactiveUsers.has(to)) {
+        sendPushNotification(to, from);
+      }
     } else {
       console.log(`[!] Destinatario ${to} no está online. Guardando en cola de mensajes offline.`);
       if (!offlineMessages.has(to)) {
         offlineMessages.set(to, []);
       }
       offlineMessages.get(to).push(data);
+      // Al estar offline (app cerrada/matada), le enviamos una notificación push
+      sendPushNotification(to, from);
     }
   });
 
