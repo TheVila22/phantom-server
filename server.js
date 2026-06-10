@@ -23,7 +23,7 @@ let db;
 if (serviceAccount) {
   try {
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+      credential: admin.credential ? admin.credential.cert(serviceAccount) : admin.cert(serviceAccount)
     });
     db = admin.firestore();
     console.log("[Push] Firebase Admin SDK e inicialización de Firestore con éxito.");
@@ -43,7 +43,7 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Redirigir cualquier otra ruta HTTP al index.html del frontend
-app.get('*', (req, res) => {
+app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
